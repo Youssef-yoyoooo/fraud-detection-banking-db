@@ -1,0 +1,165 @@
+
+--------------------------------------------------------------------------------
+1. TABLE DEFINITIONS
+--------------------------------------------------------------------------------
+
+TABLE: Branches
+- branch_id (INT, PK, AUTO_INCREMENT)
+- branch_name (VARCHAR)
+- city (VARCHAR)
+- region (VARCHAR)
+- manager_name (VARCHAR)
+- phone (VARCHAR)
+- created_at (TIMESTAMP)
+
+TABLE: Customers
+- customer_id (INT, PK, AUTO_INCREMENT)
+- national_id (VARCHAR, UNIQUE, NOT NULL)
+- first_name (VARCHAR)
+- last_name (VARCHAR)
+- email (VARCHAR, UNIQUE)
+- phone (VARCHAR)
+- address (VARCHAR)
+- city (VARCHAR)
+- date_of_birth (DATE)
+- risk_score (INT, DEFAULT 0)
+- created_at (TIMESTAMP)
+
+TABLE: Accounts
+- account_id (INT, PK, AUTO_INCREMENT)
+- customer_id (INT, FK -> Customers.customer_id)
+- branch_id (INT, FK -> Branches.branch_id)
+- account_number (VARCHAR, UNIQUE, NOT NULL)
+- account_type (ENUM: 'Savings', 'Checking', 'Business', 'Credit')
+- balance (DECIMAL)
+- currency (VARCHAR)
+- status (ENUM: 'Active', 'Suspended', 'Closed', 'Frozen')
+- opened_at (TIMESTAMP)
+
+TABLE: Transactions
+- transaction_id (INT, PK, AUTO_INCREMENT)
+- account_id (INT, FK -> Accounts.account_id)
+- transaction_type (ENUM: 'Deposit', 'Withdrawal', 'Transfer', 'Payment', 'Refund')
+- amount (DECIMAL)
+- currency (VARCHAR)
+- counterparty_account (VARCHAR)
+- channel (ENUM: 'ATM', 'Online', 'Mobile', 'Branch', 'POS')
+- ip_address (VARCHAR)
+- device_id (VARCHAR)
+- location (VARCHAR)
+- description (VARCHAR)
+- status (ENUM: 'Completed', 'Pending', 'Failed', 'Reversed')
+- created_at (TIMESTAMP)
+
+TABLE: FraudRules
+- rule_id (INT, PK, AUTO_INCREMENT)
+- rule_name (VARCHAR, UNIQUE, NOT NULL)
+- description (TEXT)
+- threshold_amount (DECIMAL)
+- time_window_minutes (INT)
+- max_frequency (INT)
+- is_active (BOOLEAN)
+- created_at (TIMESTAMP)
+
+TABLE: Users
+- user_id (INT, PK, AUTO_INCREMENT)
+- username (VARCHAR, UNIQUE, NOT NULL)
+- password_hash (VARCHAR)
+- role (ENUM: 'Admin', 'Analyst', 'Teller', 'Auditor')
+- email (VARCHAR, UNIQUE)
+- full_name (VARCHAR)
+- is_active (BOOLEAN)
+- created_at (TIMESTAMP)
+
+TABLE: FraudAlerts
+- alert_id (INT, PK, AUTO_INCREMENT)
+- transaction_id (INT, FK -> Transactions.transaction_id)
+- rule_id (INT, FK -> FraudRules.rule_id)
+- alert_type (ENUM: 'High_Value', 'Velocity', 'Geographic', 'Pattern', 'Manual')
+- severity (ENUM: 'Low', 'Medium', 'High', 'Critical')
+- description (TEXT)
+- status (ENUM: 'Open', 'Under_Review', 'Confirmed_Fraud', 'False_Positive', 'Resolved')
+- created_at (TIMESTAMP)
+- resolved_at (TIMESTAMP)
+- resolved_by (INT, FK -> Users.user_id)
+
+TABLE: FlaggedAccounts
+- flag_id (INT, PK, AUTO_INCREMENT)
+- account_id (INT, FK -> Accounts.account_id)
+- reason (VARCHAR)
+- risk_level (ENUM: 'Low', 'Medium', 'High', 'Critical')
+- flagged_at (TIMESTAMP)
+- reviewed_by (INT, FK -> Users.user_id)
+- review_status (ENUM: 'Pending', 'Under_Review', 'Cleared', 'Confirmed')
+- notes (TEXT)
+
+TABLE: FraudReports
+- report_id (INT, PK, AUTO_INCREMENT)
+- alert_id (INT, FK -> FraudAlerts.alert_id)
+- investigator_id (INT, FK -> Users.user_id)
+- findings (TEXT)
+- recommendation (ENUM: 'Close_Case', 'Freeze_Account', 'Escalate', 'File_SAR', 'Monitor')
+- evidence_summary (TEXT)
+- status (ENUM: 'Draft', 'Submitted', 'Approved', 'Rejected')
+- created_at (TIMESTAMP)
+- updated_at (TIMESTAMP)
+
+TABLE: AuditLog
+- log_id (INT, PK, AUTO_INCREMENT)
+- user_id (INT, FK -> Users.user_id)
+- action (ENUM: 'INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'QUERY')
+- table_affected (VARCHAR)
+- record_id (INT)
+- old_value (TEXT)
+- new_value (TEXT)
+- ip_address (VARCHAR)
+- created_at (TIMESTAMP)
+
+TABLE: LoginAttempts
+- attempt_id (INT, PK, AUTO_INCREMENT)
+- user_id (INT, FK -> Users.user_id)
+- ip_address (VARCHAR)
+- success (BOOLEAN)
+- attempted_at (TIMESTAMP)
+
+--------------------------------------------------------------------------------
+2. RELATIONSHIPS (FOR ERD CONNECTORS)
+--------------------------------------------------------------------------------
+
+1.  Branches ---< Accounts
+    (1-to-Many: One branch can have many accounts)
+
+2.  Customers ---< Accounts
+    (1-to-Many: One customer can have many accounts)
+
+3.  Accounts ---< Transactions
+    (1-to-Many: One account generates many transactions)
+
+4.  Transactions ---< FraudAlerts
+    (1-to-Many: One transaction can trigger multiple alerts)
+
+5.  FraudRules ---< FraudAlerts
+    (1-to-Many: One rule can be the basis for many alerts)
+
+6.  FraudAlerts ---1 FraudReports
+    (1-to-1: One alert has one investigation report)
+
+7.  Accounts ---< FlaggedAccounts
+    (1-to-Many: One account can be flagged multiple times)
+
+8.  Users ---< FraudAlerts
+    (1-to-Many: One user (analyst) can resolve many alerts)
+
+9.  Users ---< FlaggedAccounts
+    (1-to-Many: One user can review many flagged accounts)
+
+10. Users ---< FraudReports
+    (1-to-Many: One user can investigate/write many reports)
+
+11. Users ---< AuditLog
+    (1-to-Many: One user performs many actions logged in audit)
+
+12. Users ---< LoginAttempts
+    (1-to-Many: One user has multiple login attempts)
+
+

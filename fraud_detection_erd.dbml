@@ -1,0 +1,327 @@
+// ============================================================
+// FRAUD DETECTION IN BANKING TRANSACTIONS — ERD (DBML)
+// Fundamentals of Database Systems (CSE462a) — Spring 2026
+// Docs: https://dbml.dbdiagram.io/docs
+// ============================================================
+
+// ————————————————————————————————————————
+// ENUMS
+// ————————————————————————————————————————
+
+Enum account_type {
+  Savings
+  Checking
+  Business
+  Credit
+}
+
+Enum account_status {
+  Active
+  Suspended
+  Closed
+  Frozen
+}
+
+Enum transaction_type {
+  Deposit
+  Withdrawal
+  Transfer
+  Payment
+  Refund
+}
+
+Enum transaction_channel {
+  ATM
+  Online
+  Mobile
+  Branch
+  POS
+}
+
+Enum transaction_status {
+  Completed
+  Pending
+  Failed
+  Reversed
+}
+
+Enum user_role {
+  Admin
+  Analyst
+  Teller
+  Auditor
+}
+
+Enum alert_type {
+  High_Value
+  Velocity
+  Geographic
+  Pattern
+  Manual
+}
+
+Enum severity_level {
+  Low
+  Medium
+  High
+  Critical
+}
+
+Enum alert_status {
+  Open
+  Under_Review
+  Confirmed_Fraud
+  False_Positive
+  Resolved
+}
+
+Enum review_status {
+  Pending
+  Under_Review
+  Cleared
+  Confirmed
+}
+
+Enum recommendation_type {
+  Close_Case
+  Freeze_Account
+  Escalate
+  File_SAR
+  Monitor
+}
+
+Enum report_status {
+  Draft
+  Submitted
+  Approved
+  Rejected
+}
+
+Enum audit_action {
+  INSERT
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  QUERY
+}
+
+// ————————————————————————————————————————
+// CORE BANKING TABLES
+// ————————————————————————————————————————
+
+Table Branches {
+  branch_id int [pk, increment, note: 'Auto-increment primary key']
+  branch_name varchar(100) [not null]
+  city varchar(50) [not null]
+  region varchar(50) [not null]
+  manager_name varchar(100)
+  phone varchar(20)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Physical bank branch locations'
+}
+
+Table Customers {
+  customer_id int [pk, increment, note: 'Auto-increment primary key']
+  national_id varchar(20) [not null, unique, note: 'Government-issued national ID']
+  first_name varchar(50) [not null]
+  last_name varchar(50) [not null]
+  email varchar(100) [unique]
+  phone varchar(20)
+  address varchar(200)
+  city varchar(50)
+  date_of_birth date
+  risk_score int [default: 0, note: 'Score 0-100; higher = riskier']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Bank customers with fraud risk scoring'
+}
+
+Table Accounts {
+  account_id int [pk, increment, note: 'Auto-increment primary key']
+  customer_id int [not null, ref: > Customers.customer_id]
+  branch_id int [not null, ref: > Branches.branch_id]
+  account_number varchar(20) [not null, unique]
+  account_type account_type [not null]
+  balance decimal(15,2) [default: 0.00]
+  currency varchar(3) [default: 'USD']
+  status account_status [default: 'Active']
+  opened_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Customer bank accounts linked to branches'
+}
+
+// ————————————————————————————————————————
+// TRANSACTION MONITORING
+// ————————————————————————————————————————
+
+Table Transactions {
+  transaction_id int [pk, increment, note: 'Auto-increment primary key']
+  account_id int [not null, ref: > Accounts.account_id]
+  transaction_type transaction_type [not null]
+  amount decimal(15,2) [not null, note: 'Must be > 0']
+  currency varchar(3) [default: 'USD']
+  counterparty_account varchar(20)
+  channel transaction_channel [not null]
+  ip_address varchar(45)
+  device_id varchar(100)
+  location varchar(100)
+  description varchar(255)
+  status transaction_status [default: 'Completed']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'All financial transactions across channels'
+}
+
+Table FraudRules {
+  rule_id int [pk, increment, note: 'Auto-increment primary key']
+  rule_name varchar(100) [not null, unique]
+  description text
+  threshold_amount decimal(15,2)
+  time_window_minutes int
+  max_frequency int
+  is_active boolean [default: true]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Configurable rules that trigger fraud alerts'
+}
+
+// ————————————————————————————————————————
+// USER & ACCESS MANAGEMENT
+// ————————————————————————————————————————
+
+Table Users {
+  user_id int [pk, increment, note: 'Auto-increment primary key']
+  username varchar(50) [not null, unique]
+  password_hash varchar(255) [not null]
+  role user_role [not null]
+  email varchar(100) [unique]
+  full_name varchar(100)
+  is_active boolean [default: true]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'System users: admins, analysts, tellers, auditors'
+}
+
+// ————————————————————————————————————————
+// FRAUD DETECTION & INVESTIGATION
+// ————————————————————————————————————————
+
+Table FraudAlerts {
+  alert_id int [pk, increment, note: 'Auto-increment primary key']
+  transaction_id int [not null, ref: > Transactions.transaction_id]
+  rule_id int [ref: > FraudRules.rule_id]
+  alert_type alert_type [not null]
+  severity severity_level [not null]
+  description text
+  status alert_status [default: 'Open']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  resolved_at timestamp
+  resolved_by int [ref: > Users.user_id]
+
+  Note: 'Alerts generated when fraud rules are triggered'
+}
+
+Table FlaggedAccounts {
+  flag_id int [pk, increment, note: 'Auto-increment primary key']
+  account_id int [not null, ref: > Accounts.account_id]
+  reason varchar(255) [not null]
+  risk_level severity_level [not null]
+  flagged_at timestamp [default: `CURRENT_TIMESTAMP`]
+  reviewed_by int [ref: > Users.user_id]
+  review_status review_status [default: 'Pending']
+  notes text
+
+  Note: 'Accounts flagged for suspicious activity'
+}
+
+Table FraudReports {
+  report_id int [pk, increment, note: 'Auto-increment primary key']
+  alert_id int [not null, ref: > FraudAlerts.alert_id]
+  investigator_id int [not null, ref: > Users.user_id]
+  findings text [not null]
+  recommendation recommendation_type [not null]
+  evidence_summary text
+  status report_status [default: 'Draft']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Investigation reports for confirmed fraud alerts'
+}
+
+// ————————————————————————————————————————
+// AUDIT & SECURITY
+// ————————————————————————————————————————
+
+Table AuditLog {
+  log_id int [pk, increment, note: 'Auto-increment primary key']
+  user_id int [ref: > Users.user_id]
+  action audit_action [not null]
+  table_affected varchar(50)
+  record_id int
+  old_value text
+  new_value text
+  ip_address varchar(45)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Immutable audit trail of all system actions'
+}
+
+Table LoginAttempts {
+  attempt_id int [pk, increment, note: 'Auto-increment primary key']
+  user_id int [not null, ref: > Users.user_id]
+  ip_address varchar(45) [not null]
+  success boolean [not null]
+  attempted_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Tracks login successes and failures for security'
+}
+
+// ————————————————————————————————————————
+// SAMPLE DATA
+// ————————————————————————————————————————
+
+Records Branches(branch_id, branch_name, city, region, manager_name, phone) {
+  1, 'Downtown Main', 'Cairo', 'North', 'Ahmed Hassan', '01001111111'
+  2, 'Zamalek Branch', 'Cairo', 'North', 'Sara Ibrahim', '01002222222'
+  3, 'Maadi Branch', 'Cairo', 'South', 'Omar Khalil', '01003333333'
+  4, 'Alexandria Central', 'Alexandria', 'West', 'Layla Farouk', '01004444444'
+  5, 'Smouha Branch', 'Alexandria', 'West', 'Tarek Nabil', '01005555555'
+}
+
+Records Customers(customer_id, national_id, first_name, last_name, email, city, risk_score) {
+  1, '29001011234567', 'Mohamed', 'El-Sayed', 'mohamed.s@email.com', 'Cairo', 5
+  2, '29105221234567', 'Fatma', 'Ahmed', 'fatma.a@email.com', 'Alexandria', 10
+  3, '28803151234567', 'Ali', 'Hassan', 'ali.h@email.com', 'Cairo', 70
+  4, '29507081234567', 'Nour', 'Ibrahim', 'nour.i@email.com', 'Mansoura', 3
+  5, '29209121234567', 'Youssef', 'Kamal', 'youssef.k@email.com', 'Tanta', 15
+  6, '28711251234567', 'Sara', 'Mahmoud', 'sara.m@email.com', 'Giza', 85
+}
+
+Records Accounts(account_id, customer_id, branch_id, account_number, account_type, balance, status) {
+  1, 1, 1, 'ACC-0001-SAV', 'Savings', 25000.00, 'Active'
+  2, 1, 1, 'ACC-0001-CHK', 'Checking', 8500.00, 'Active'
+  3, 2, 4, 'ACC-0002-SAV', 'Savings', 42000.00, 'Active'
+  4, 3, 1, 'ACC-0003-BUS', 'Business', 150000.00, 'Frozen'
+  5, 4, 5, 'ACC-0004-SAV', 'Savings', 12000.00, 'Active'
+  6, 6, 3, 'ACC-0006-BUS', 'Business', 320000.00, 'Suspended'
+}
+
+Records Users(user_id, username, role, full_name, is_active) {
+  1, 'admin1', 'Admin', 'System Administrator', 1
+  2, 'admin2', 'Admin', 'Chief Security Officer', 1
+  3, 'analyst1', 'Analyst', 'Nora Samy', 1
+  4, 'analyst2', 'Analyst', 'Mostafa Reda', 1
+  5, 'teller1', 'Teller', 'Ahmad Teller', 1
+  6, 'auditor1', 'Auditor', 'Samir Auditor', 1
+}
+
+Records FraudRules(rule_id, rule_name, threshold_amount, time_window_minutes, max_frequency, is_active) {
+  1, 'High Value Single', 10000.00, null, null, 1
+  2, 'Rapid Fire', null, 10, 5, 1
+  3, 'Geo Anomaly', null, 60, null, 1
+  4, 'Midnight Activity', 5000.00, null, null, 1
+  5, 'Split Transaction', 9500.00, 60, 3, 1
+  6, 'Login Failure Spike', null, 30, 5, 1
+}
